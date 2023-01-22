@@ -32,8 +32,6 @@ int main(void)
                 if (nl)
                         *nl = '\0';
 
-
-
                 /* Builtin command */
                 if (!strcmp(cmd, "exit")) {
                         fprintf(stderr, "Bye...\n");
@@ -51,15 +49,15 @@ int main(void)
                 args[0] = command;
 
                 char* token = strtok(NULL, " ");
+                int i = 1;
                 do {
-                        int i = 1;
                         args[i] = token;
                         token = strtok(NULL, " ");
                         i++;
                 } while (token != NULL);
 
+
                 retval = psuedo_system(command, args);
-                printf("2 %s\n", cmd);
                 fprintf(stderr, "+ completed '%s' [%d]\n",
                         cmd, retval);
         }
