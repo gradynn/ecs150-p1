@@ -70,7 +70,6 @@ int main(void)
                 }
 
                 /* Regular command */
-              
 		struct Command* command_ptr = &command;
 		command_parse(command_ptr, cmd);
 
@@ -94,6 +93,12 @@ int main(void)
 
 int psuedo_system(char* cmd, char* args[])
 {
+        /* Handles change of directory without creating new process */
+        if (!strcmp(cmd, "cd")) {
+                int ch_status = chdir(args[1]);
+                return WEXITSTATUS(ch_status);
+        }
+
         int pid = fork();
 	int status = 0;
 
