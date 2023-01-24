@@ -22,9 +22,10 @@ struct Command {
 	char cmd[CMDLINE_MAX];
 	char* args[16];
         char* path;
+	struct Command* next;
 };
 
-void error_mgmt(enum error err)
+int error_mgmt(enum error err)
 {
         switch (err) {
         case ERR_TOO_MANY_ARGS:
@@ -49,8 +50,11 @@ void error_mgmt(enum error err)
                 fprintf(stderr, "Error: command not found\n");
                 break;
         default:
+		return 0;
                 break;
         }
+
+	return -1;
 }
 
 int psuedo_system(struct Command* command)
@@ -80,6 +84,7 @@ int psuedo_system(struct Command* command)
                         dup2(file_o, STDOUT_FILENO);
                         close(file_o);
                 }
+
                 execvp(command->args[0], command->args);
                 exit(1);
         }
@@ -119,6 +124,8 @@ enum error command_parse(struct Command* command, char* raw_cmd)
 int main(void)
 {
         char cmd[CMDLINE_MAX];
+	struct Command command;
+	struct Commmand* current_command;
 
         while (1) {
                 char *nl;
@@ -152,23 +159,27 @@ int main(void)
 
                 /* Iterate through and build list of commands (each parsed 
                         individually */
-                int i = 1;
+
                 char* token = strtok(cmd, "|");
-                while (token != NULL) {
-                        struct Command temp_command;
-                        command_parse(&temp_command, token);
-                        commands[i] = temp_command;
-                        ++i;
+                enum error err = command_parse(&command, token);
+		
+		while (token != NULL) {
+                	struct Command nxt_command = (struct Command*) malloc(sizeof(struct Command));       
+                        
+			enum error err = command_parse(&nxt_command, token);
                         token = strtok(NULL, "|");
                 }
 
                 /* Iterate through list of commands and execute sudo, system
                         each time */
-                for(int i = 0; i < cmd_count; i++) {
-                        retval = psuedo_system(&commands[i]);
-                        fprintf(stderr, "+ completed '%s' [%d]\n",
-                        cmd_cpy, retval);
-                }
+		
+		if (error_mgmt(err) != -1) {
+                	while (current_command->next != NULL) {
+                        	retval = psuedo_system(&command);
+                        	fprintf(stderr, "+ completed '%s' [%d]\n",
+                        	cmd_cpy, retval);
+                	}
+		}
 
                 // fprintf(stderr, "+ completed '%s' [%d]\n", cmd_cpy, retval);
         }
