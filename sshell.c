@@ -8,6 +8,7 @@
 #define CMDLINE_MAX 512
 
 enum error {
+        ERR,
         NO_ERR,
         ERR_TOO_MANY_ARGS,
         ERR_MISS_CMD,
@@ -25,7 +26,12 @@ struct Command {
 	struct Command* next;
 };
 
-int error_mgmt(enum error err)
+struct StringList {
+        char string[CMDLINE_MAX];
+        struct StringList* next;
+};
+
+enum error error_mgmt(enum error err)
 {
         switch (err) {
         case ERR_TOO_MANY_ARGS:
@@ -50,11 +56,11 @@ int error_mgmt(enum error err)
                 fprintf(stderr, "Error: command not found\n");
                 break;
         default:
-		return 0;
+		return NO_ERR;
                 break;
         }
 
-	return -1;
+	return ERR;
 }
 
 int psuedo_system(struct Command* command)
@@ -95,15 +101,19 @@ int psuedo_system(struct Command* command)
 	return WEXITSTATUS(status);
 }
 
-enum error command_parse(struct Command* command, char* raw_cmd)
+enum error command_parse(struct Command* command, char* cmd_text)
 {
         /* isolate output redirection path */
+        char* raw_cmd = (char*) malloc(sizeof(cmd_text));
+        strcpy(raw_cmd, cmd_text);
         char* w_cmd = strtok(raw_cmd, ">");
         char* redirect_path = strtok(NULL, ">");
-        command->path = redirect_path;
+        if (redirect_path != NULL)
+                command->path = redirect_path;
 
         /* isolate/assign command */
-        char* token = strtok(w_cmd, " ");
+        char* token = (char*) malloc(CMDLINE_MAX);
+        token = strtok(w_cmd, " ");
         strcpy(command->cmd, token);
         command->args[0] = token;
 
@@ -124,12 +134,13 @@ enum error command_parse(struct Command* command, char* raw_cmd)
 int main(void)
 {
         char cmd[CMDLINE_MAX];
-	struct Command command;
-	struct Commmand* current_command;
 
         while (1) {
                 char *nl;
                 int retval;
+                struct Command* head_command = (struct Command*) malloc(sizeof(struct Command));
+	        struct Command* current_command = (struct Command*) malloc(sizeof(struct Command));
+                int command_counter = 1;
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -157,31 +168,71 @@ int main(void)
                         break;
                 }
 
-                /* Iterate through and build list of commands (each parsed 
-                        individually */
-
+                /* Build a linked list of the command strings seperated by the
+                        | operator */
+                struct StringList* string_list_head = (struct StringList*) malloc(sizeof(struct StringList));
+                struct StringList* string_list_current = (struct StringList*) malloc(sizeof(struct StringList));
+                string_list_head = string_list_current;
                 char* token = strtok(cmd, "|");
-                enum error err = command_parse(&command, token);
-		
-		while (token != NULL) {
-                	struct Command nxt_command = (struct Command*) malloc(sizeof(struct Command));       
-                        
-			enum error err = command_parse(&nxt_command, token);
+                strcpy(string_list_current->string, token);
+                token = strtok(NULL, "|");
+                while (token != NULL) {
+                        command_counter++;
+                        struct StringList* string_list_new = (struct StringList*) malloc(sizeof(struct StringList));
+                        strcpy(string_list_new->string, token);
+                        string_list_current->next = string_list_new;
+                        string_list_current = string_list_current->next;
                         token = strtok(NULL, "|");
                 }
+                string_list_current->next = NULL;
 
-                /* Iterate through list of commands and execute sudo, system
+                /* Build a linked list of parsed Command stucts */
+                string_list_current = string_list_head;
+                head_command = current_command;
+                enum error err = command_parse(current_command, string_list_current->string);
+                string_list_current = string_list_current->next;
+                while(string_list_current != NULL) {
+                        struct Command* next_command = (struct Command*) malloc(sizeof(struct Command));
+                        enum error err = command_parse(next_command, string_list_current->string);
+                        current_command->next = next_command;
+                        current_command = current_command->next;
+                        string_list_current = string_list_current->next;
+                }
+
+                /* Iterate through list of commands and execute sudo system
                         each time */
-		
-		if (error_mgmt(err) != -1) {
+		current_command = head_command;
+
+		/*
+                if (error_mgmt(err) != ERR) {
                 	while (current_command->next != NULL) {
-                        	retval = psuedo_system(&command);
+                        	retval = psuedo_system(current_command);
                         	fprintf(stderr, "+ completed '%s' [%d]\n",
                         	cmd_cpy, retval);
                 	}
 		}
+                */
 
-                // fprintf(stderr, "+ completed '%s' [%d]\n", cmd_cpy, retval);
+                int exit_codes[command_counter];
+                int i = 0;
+                while (current_command != NULL) {
+                        retval = psuedo_system(current_command);
+                        exit_codes[i] = retval;
+                        i++;
+                        current_command = current_command->next;
+                }
+
+                fprintf(stderr, "+ completed '%s' ", cmd_cpy);
+                for (i = 0; i < command_counter; i++) {
+                        fprintf(stderr, "[%i]", exit_codes[i]);
+                }
+                fprintf(stderr, "\n");
+
+                free(head_command);
+                free(current_command);
+                free(string_list_head);
+                free(string_list_current);
+                free(token);
         }
 
         return EXIT_SUCCESS;
