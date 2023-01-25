@@ -78,8 +78,8 @@ int psuedo_system(struct Command* command)
                 return 0;
         }
 
-        int pid = fork();
 	int status = 0;
+        int pid = fork();
 
         if (pid == 0) { // child
                 /* Support for output redirection */
@@ -99,6 +99,80 @@ int psuedo_system(struct Command* command)
         }
 
 	return WEXITSTATUS(status);
+}
+
+int execute_job(struct Command* command_head, int command_counter)
+{
+        int status = 0;
+        if (command_counter > 1) { // multiple commands
+                int pid = fork();
+                if (pid == 0) { // child 1
+                        int fd[2];
+                        pipe(fd);
+
+                        pid = fork();
+                        if (pid == 0) { // child 2, second command
+                                close(fd[1]);
+                                dup2(fd[0], STDIN_FILENO);
+                                close(fd[0]);
+                                execvp(command_head->next->args[0], command_head->next->args);
+                        } else { // parent 2, first command
+                                close(fd[0]);
+                                dup2(fd[1], STDOUT_FILENO);
+                                close(fd[1]);
+                                execvp(command_head->args[0], command_head->args);
+                        }
+                } else { // parent 1
+                        wait(&status);
+                }
+        } else { // single command
+                /* Handles change of directory without creating new process */
+                if (!strcmp(command_head->args[0], "cd")) {
+                        int ch_status = chdir(command_head->args[1]);
+                        return WEXITSTATUS(ch_status);
+                }
+
+                if (!strcmp(command_head->args[0], "pwd")) {
+                        char cwd[CMDLINE_MAX];
+                        getcwd(cwd, sizeof(cwd));
+                        printf("%s\n", cwd);
+                        return 0;
+                }
+
+                int status = 0;
+                int pid = fork();
+
+                if (pid == 0) { // child
+                        /* Support for output redirection */
+                        if (command_head->path != NULL) {
+                                int file_o = open(command_head->path, O_RDWR | O_CREAT, 0644);
+                                //if (file_o == ERROR OUTPUT OF OPEN)
+                                        // use this to throw a relevant error
+                                dup2(file_o, STDOUT_FILENO);
+                                close(file_o);
+                        }
+
+                        execvp(command_head->args[0], command_head->args);
+                        exit(1);
+                }
+                else { // parent
+                        waitpid(pid, &status, 0);
+                }
+        }
+
+        return WEXITSTATUS(status);
+}
+
+int execute_job_v2(struct Command* head, int command_counter) {
+        struct Command* command_ptr = head;
+
+        int status;
+        int pid = fork();
+        for (int i = 1; i < command_counter; i++) {
+                
+        }
+
+        return 0;
 }
 
 enum error command_parse(struct Command* command, char* cmd_text)
@@ -143,7 +217,7 @@ int main(void)
                 int command_counter = 1;
 
                 /* Print prompt */
-                printf("sshell$ ");
+                printf("sshell@ucd$ ");
                 fflush(stdout);
 
                 /* Get command line */
@@ -151,6 +225,7 @@ int main(void)
 
                 /* Print command line if stdin is not provided by terminal */
                 if (!isatty(STDIN_FILENO)) {
+                        //printf("%s", cmd);
                         fflush(stdout);
                 }
 
@@ -201,7 +276,6 @@ int main(void)
 
                 /* Iterate through list of commands and execute sudo system
                         each time */
-		current_command = head_command;
 
 		/*
                 if (error_mgmt(err) != ERR) {
@@ -213,26 +287,24 @@ int main(void)
 		}
                 */
 
-                int exit_codes[command_counter];
-                int i = 0;
-                while (current_command != NULL) {
-                        retval = psuedo_system(current_command);
-                        exit_codes[i] = retval;
-                        i++;
-                        current_command = current_command->next;
-                }
+                current_command = head_command;
+                execute_job_v2(head_command, command_counter);
 
-                fprintf(stderr, "+ completed '%s' ", cmd_cpy);
-                for (i = 0; i < command_counter; i++) {
-                        fprintf(stderr, "[%i]", exit_codes[i]);
-                }
-                fprintf(stderr, "\n");
+                // int exit_code;
+                // exit_code = psuedo_system(current_command, command_counter);
+                // current_command = current_command->next;
 
-                free(head_command);
-                free(current_command);
-                free(string_list_head);
-                free(string_list_current);
-                free(token);
+                // fprintf(stderr, "+ completed '%s' ", cmd_cpy);
+                // for (int i = 0; i < command_counter; i++) {
+                //         fprintf(stderr, "[%i]", exit_codes[i]);
+                // }
+                // fprintf(stderr, "\n");
+
+                // free(head_command);
+                // free(current_command);
+                // free(string_list_head);
+                // free(string_list_current);
+                // free(token);
         }
 
         return EXIT_SUCCESS;
