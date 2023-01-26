@@ -23,6 +23,7 @@ struct CommandList {
 	char cmd[CMDLINE_MAX];
 	char* args[16];
         char* path;
+        int append;
 	struct CommandList* next;
 };
 
@@ -101,7 +102,7 @@ int psuedo_system(struct CommandList* command)
 	return WEXITSTATUS(status);
 }
 
-int directory_traversal(struct Command* command_head) {
+int directory_traversal(struct CommandList* command_head) {
         struct CommandList* ptr = command_head;
 
         while (ptr != NULL) {
@@ -119,11 +120,20 @@ int directory_traversal(struct Command* command_head) {
 
                 ptr = ptr->next;
         }
+
+        return 0;
 }
 
 void output_redirection(struct CommandList* command) {
         if (command->path != NULL) {
-                int file_o = open(command->path, O_RDWR | O_CREAT, 0644);
+                int file_o;
+
+                if (command->append == 0)
+                        file_o = open(command->path, O_RDWR | O_CREAT, 0644);
+                else
+                        file_o = open(command->path, 
+                                O_RDWR | O_CREAT | O_APPEND,
+                                0644);
                 //if (file_o == ERROR OUTPUT OF OPEN)
                                 // use this to throw a relevant error
                 dup2(file_o, STDOUT_FILENO);
@@ -141,6 +151,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                 int pid = fork();
 
                 if (pid == 0) { //child
+                        output_redirection(ptr);
                         execvp(ptr->args[0], ptr->args);
                 } else { // parent
                         waitpid(pid, &(exit_codes[0]), 0);
@@ -192,8 +203,6 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                 pipe(fd);
                                 pid = fork();
                                 if (pid == 0) { // child 3
-                                        fprintf(stderr, "I should be the first call to exec\n");
-
                                         close(fd[0]);
                                         dup2(fd[1], STDOUT_FILENO);
                                         close(fd[1]);
@@ -202,8 +211,6 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                         execvp(ptr->args[0], ptr->args);
                                         exit(1);
                                 } else { //parent 3
-                                        fprintf(stderr, "I should be the second call to exec\n");
-
                                         close(fd[1]);
                                         dup2(fd[0], STDIN_FILENO);
                                         close(fd[0]);
@@ -216,8 +223,6 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                         exit(1);
                                 }
                         } else { // parent 2
-                                fprintf(stderr, "I should be the third call to exec!\n");
-
                                 close(fd[1]);
                                 dup2(fd[0], STDIN_FILENO);
                                 close(fd[0]);
@@ -333,13 +338,25 @@ void stringlist_parse(struct StringList* head_string_list, int* command_counter,
 
 enum error command_parse(struct CommandList* command, char* cmd_text)
 {
-        /* isolate output redirection path */
         char* raw_cmd = (char*) malloc(sizeof(cmd_text));
         strcpy(raw_cmd, cmd_text);
+
+        /* isolate output redirection path */
+        int operator_count = 0; 
+        for (int i = 0; i < strlen(raw_cmd); i++) {
+                if (raw_cmd[i] == '>')
+                        operator_count++;
+        }
+
+        if (operator_count > 1) 
+                command->append = 1;
+        else
+                command->append = 0;
         char* w_cmd = strtok(raw_cmd, ">");
         char* redirect_path = strtok(NULL, ">");
-        if (redirect_path != NULL)
+        if (redirect_path != NULL) {
                 command->path = redirect_path;
+        }
 
         /* isolate/assign command */
         char* token = (char*) malloc(CMDLINE_MAX);
