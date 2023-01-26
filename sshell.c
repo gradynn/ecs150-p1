@@ -121,6 +121,16 @@ int directory_traversal(struct Command* command_head) {
         }
 }
 
+void output_redirection(struct CommandList* command) {
+        if (command->path != NULL) {
+                int file_o = open(command->path, O_RDWR | O_CREAT, 0644);
+                //if (file_o == ERROR OUTPUT OF OPEN)
+                                // use this to throw a relevant error
+                dup2(file_o, STDOUT_FILENO);
+                close(file_o);
+        }
+}
+
 void execute_job(struct CommandList* command_head, int command_counter, int exit_codes[])
 {
         struct CommandList* ptr = command_head;
@@ -148,6 +158,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                 dup2(fd[1], STDOUT_FILENO);
                                 close(fd[1]);
 
+                                output_redirection(ptr);
                                 execvp(ptr->args[0], ptr->args);
                                 exit(1);
                         } else { // parent 2
@@ -158,6 +169,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                 waitpid(pid, &(exit_codes[0]), 0);
 
                                 ptr = ptr->next;
+                                output_redirection(ptr);
                                 execvp(ptr->args[0], ptr->args);
                                 exit(1);
                         }
@@ -186,6 +198,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                         dup2(fd[1], STDOUT_FILENO);
                                         close(fd[1]);
 
+                                        output_redirection(ptr);
                                         execvp(ptr->args[0], ptr->args);
                                         exit(1);
                                 } else { //parent 3
@@ -198,6 +211,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                         waitpid(pid, &(exit_codes[0]), 0);
 
                                         ptr = ptr->next;
+                                        output_redirection(ptr);
                                         execvp(ptr->args[0], ptr->args);
                                         exit(1);
                                 }
@@ -211,6 +225,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                 waitpid(pid, &(exit_codes[1]), 0);
 
                                 ptr = ptr->next->next;
+                                output_redirection(ptr);
                                 execvp(ptr->args[0], ptr->args);
                                 exit(1);
                         }
@@ -244,8 +259,9 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                                 dup2(fd[1], STDOUT_FILENO);
                                                 close(fd[1]);
 
+                                                output_redirection(ptr);
                                                 execvp(ptr->args[0], ptr->args);
-                                                exit(-1);
+                                                exit(1);
                                         } else { // parent 4
                                                 close(fd[1]);
                                                 dup2(fd[0], STDIN_FILENO);
@@ -254,8 +270,9 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                                 waitpid(pid, &(exit_codes[0]), 0);
 
                                                 ptr = ptr->next;
+                                                output_redirection(ptr);
                                                 execvp(ptr->args[0], ptr->args);
-                                                exit(-1);
+                                                exit(1);
                                         }
 
                                 } else { //parent 3
@@ -268,6 +285,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                         waitpid(pid, &(exit_codes[1]), 0);
 
                                         ptr = ptr->next->next;
+                                        output_redirection(ptr);
                                         execvp(ptr->args[0], ptr->args);
                                         exit(1);
                                 }
@@ -281,6 +299,7 @@ void execute_job(struct CommandList* command_head, int command_counter, int exit
                                 waitpid(pid, &(exit_codes[2]), 0);
 
                                 ptr = ptr->next->next->next;
+                                output_redirection(ptr);
                                 execvp(ptr->args[0], ptr->args);
                                 exit(1);
                         }
