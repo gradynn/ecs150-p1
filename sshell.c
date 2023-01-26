@@ -19,11 +19,11 @@ enum error {
         ERR_CMD_NOT_FND
 };
 
-struct Command {
+struct CommandList {
 	char cmd[CMDLINE_MAX];
 	char* args[16];
         char* path;
-	struct Command* next;
+	struct CommandList* next;
 };
 
 struct StringList {
@@ -63,7 +63,7 @@ enum error error_mgmt(enum error err)
 	return ERR;
 }
 
-int psuedo_system(struct Command* command)
+int psuedo_system(struct CommandList* command)
 {
         /* Handles change of directory without creating new process */
         if (!strcmp(command->args[0], "cd")) {
@@ -101,81 +101,218 @@ int psuedo_system(struct Command* command)
 	return WEXITSTATUS(status);
 }
 
-int execute_job(struct Command* command_head, int command_counter)
-{
-        int status = 0;
-        if (command_counter > 1) { // multiple commands
-                int pid = fork();
-                if (pid == 0) { // child 1
-                        int fd[2];
-                        pipe(fd);
+int directory_traversal(struct Command* command_head) {
+        struct CommandList* ptr = command_head;
 
-                        pid = fork();
-                        if (pid == 0) { // child 2, second command
-                                close(fd[1]);
-                                dup2(fd[0], STDIN_FILENO);
-                                close(fd[0]);
-                                execvp(command_head->next->args[0], command_head->next->args);
-                        } else { // parent 2, first command
-                                close(fd[0]);
-                                dup2(fd[1], STDOUT_FILENO);
-                                close(fd[1]);
-                                execvp(command_head->args[0], command_head->args);
-                        }
-                } else { // parent 1
-                        wait(&status);
-                }
-        } else { // single command
-                /* Handles change of directory without creating new process */
-                if (!strcmp(command_head->args[0], "cd")) {
-                        int ch_status = chdir(command_head->args[1]);
+        while (ptr != NULL) {
+                if (!strcmp(ptr->args[0], "cd")) {
+                        int ch_status = chdir(ptr->args[1]);
                         return WEXITSTATUS(ch_status);
                 }
 
-                if (!strcmp(command_head->args[0], "pwd")) {
+                if (!strcmp(ptr->args[0], "pwd")) {
                         char cwd[CMDLINE_MAX];
                         getcwd(cwd, sizeof(cwd));
                         printf("%s\n", cwd);
                         return 0;
                 }
 
-                int status = 0;
+                ptr = ptr->next;
+        }
+}
+
+void execute_job(struct CommandList* command_head, int command_counter, int exit_codes[])
+{
+        struct CommandList* ptr = command_head;
+
+        directory_traversal(ptr);
+
+        if (command_counter == 1) {
                 int pid = fork();
 
-                if (pid == 0) { // child
-                        /* Support for output redirection */
-                        if (command_head->path != NULL) {
-                                int file_o = open(command_head->path, O_RDWR | O_CREAT, 0644);
-                                //if (file_o == ERROR OUTPUT OF OPEN)
-                                        // use this to throw a relevant error
-                                dup2(file_o, STDOUT_FILENO);
-                                close(file_o);
+                if (pid == 0) { //child
+                        execvp(ptr->args[0], ptr->args);
+                } else { // parent
+                        waitpid(pid, &(exit_codes[0]), 0);
+                }
+        } else if (command_counter == 2) {
+                int pid = fork();
+                int fd[2];
+
+                if (pid == 0) { // child 1
+                        pipe(fd);
+                        
+                        pid = fork();
+                        if(pid == 0) { // child 2
+                                close(fd[0]);
+                                dup2(fd[1], STDOUT_FILENO);
+                                close(fd[1]);
+
+                                execvp(ptr->args[0], ptr->args);
+                                exit(1);
+                        } else { // parent 2
+                                close(fd[1]);
+                                dup2(fd[0], STDIN_FILENO);
+                                close(fd[0]);
+                                
+                                waitpid(pid, &(exit_codes[0]), 0);
+
+                                ptr = ptr->next;
+                                execvp(ptr->args[0], ptr->args);
+                                exit(1);
                         }
-
-                        execvp(command_head->args[0], command_head->args);
-                        exit(1);
+                } else { // parent 1
+                      waitpid(pid, &(exit_codes[1]), 0);
                 }
-                else { // parent
-                        waitpid(pid, &status, 0);
+        } else if (command_counter == 3) {
+                int pid = fork();
+                int fd[2];
+
+                if (pid == 0) { // child 1
+                        pipe(fd);
+                        pid = fork();
+
+                        if (pid == 0) { // child 2
+                                close(fd[0]);
+                                dup2(fd[1], STDOUT_FILENO);
+                                close(fd[1]);
+
+                                pipe(fd);
+                                pid = fork();
+                                if (pid == 0) { // child 3
+                                        fprintf(stderr, "I should be the first call to exec\n");
+
+                                        close(fd[0]);
+                                        dup2(fd[1], STDOUT_FILENO);
+                                        close(fd[1]);
+
+                                        execvp(ptr->args[0], ptr->args);
+                                        exit(1);
+                                } else { //parent 3
+                                        fprintf(stderr, "I should be the second call to exec\n");
+
+                                        close(fd[1]);
+                                        dup2(fd[0], STDIN_FILENO);
+                                        close(fd[0]);
+
+                                        waitpid(pid, &(exit_codes[0]), 0);
+
+                                        ptr = ptr->next;
+                                        execvp(ptr->args[0], ptr->args);
+                                        exit(1);
+                                }
+                        } else { // parent 2
+                                fprintf(stderr, "I should be the third call to exec!\n");
+
+                                close(fd[1]);
+                                dup2(fd[0], STDIN_FILENO);
+                                close(fd[0]);
+                                
+                                waitpid(pid, &(exit_codes[1]), 0);
+
+                                ptr = ptr->next->next;
+                                execvp(ptr->args[0], ptr->args);
+                                exit(1);
+                        }
+                } else { // parent 1
+                        waitpid(pid, &(exit_codes[2]), 0);
                 }
-        }
+        } else if (command_counter == 4) { 
+                int pid = fork();
+                int fd[2];
 
-        return WEXITSTATUS(status);
-}
+                if (pid == 0) { // child 1
+                        pipe(fd);
+                        pid = fork();
 
-int execute_job_v2(struct Command* head, int command_counter) {
-        struct Command* command_ptr = head;
+                        if (pid == 0) { // child 2
+                                close(fd[0]);
+                                dup2(fd[1], STDOUT_FILENO);
+                                close(fd[1]);
 
-        int status;
-        int pid = fork();
-        for (int i = 1; i < command_counter; i++) {
+                                pipe(fd);
+                                pid = fork();
+                                if (pid == 0) { // child 3
+                                        close(fd[0]);
+                                        dup2(fd[1], STDOUT_FILENO);
+                                        close(fd[1]);
+
+                                        pipe(fd);
+                                        pid = fork();
+                                        if (pid == 0) { // child 4
+                                                close(fd[0]);
+                                                dup2(fd[1], STDOUT_FILENO);
+                                                close(fd[1]);
+
+                                                execvp(ptr->args[0], ptr->args);
+                                                exit(-1);
+                                        } else { // parent 4
+                                                close(fd[1]);
+                                                dup2(fd[0], STDIN_FILENO);
+                                                close(fd[0]);
+
+                                                waitpid(pid, &(exit_codes[0]), 0);
+
+                                                ptr = ptr->next;
+                                                execvp(ptr->args[0], ptr->args);
+                                                exit(-1);
+                                        }
+
+                                } else { //parent 3
+                                        fprintf(stderr, "I should be the second call to exec\n");
+
+                                        close(fd[1]);
+                                        dup2(fd[0], STDIN_FILENO);
+                                        close(fd[0]);
+
+                                        waitpid(pid, &(exit_codes[1]), 0);
+
+                                        ptr = ptr->next->next;
+                                        execvp(ptr->args[0], ptr->args);
+                                        exit(1);
+                                }
+                        } else { // parent 2
+                                fprintf(stderr, "I should be the third call to exec!\n");
+
+                                close(fd[1]);
+                                dup2(fd[0], STDIN_FILENO);
+                                close(fd[0]);
+                                
+                                waitpid(pid, &(exit_codes[2]), 0);
+
+                                ptr = ptr->next->next->next;
+                                execvp(ptr->args[0], ptr->args);
+                                exit(1);
+                        }
+                } else { // parent 1
+                        waitpid(pid, &(exit_codes[3]), 0);
+                }
+        } else {
                 
         }
-
-        return 0;
 }
 
-enum error command_parse(struct Command* command, char* cmd_text)
+void stringlist_parse(struct StringList* head_string_list, int* command_counter, char cmd[CMDLINE_MAX])
+{
+        /* Create pointer to move through list, preserving head */
+        struct StringList* current_string_list = (struct StringList*) malloc(sizeof(struct StringList));
+        current_string_list = head_string_list;
+
+        char* token = strtok(cmd, "|");
+        strcpy(current_string_list->string, token);
+        token = strtok(NULL, "|");
+        while (token != NULL) {
+                ++(*(command_counter));
+                struct StringList* new_string_list = (struct StringList*) malloc(sizeof(struct StringList));
+                strcpy(new_string_list->string, token);
+                current_string_list->next = new_string_list;
+                current_string_list = current_string_list->next;
+                token = strtok(NULL, "|");
+        }
+        current_string_list->next = NULL;
+}
+
+enum error command_parse(struct CommandList* command, char* cmd_text)
 {
         /* isolate output redirection path */
         char* raw_cmd = (char*) malloc(sizeof(cmd_text));
@@ -205,6 +342,27 @@ enum error command_parse(struct Command* command, char* cmd_text)
         return 0;
 }
 
+void commandlist_parse(struct CommandList* head_command, struct StringList* head_string_list) {
+        /* Create pointers to move through lists, preserving heads */
+        struct CommandList* current_command = (struct CommandList*) malloc(sizeof(struct CommandList));
+        current_command = head_command;
+        struct StringList* current_string_list  = (struct StringList*) malloc(sizeof(struct StringList));
+        current_string_list = head_string_list;
+
+        /* Implicit first call to command parse */
+        command_parse(current_command, current_string_list->string);
+        current_string_list = current_string_list->next;
+
+        /* Parse the remining strings */
+        while(current_string_list != NULL) {
+                struct CommandList* next_command = (struct CommandList*) malloc(sizeof(struct CommandList));
+                enum error err = command_parse(next_command, current_string_list->string);
+                current_command->next = next_command;
+                current_command = current_command->next;
+                current_string_list = current_string_list->next;
+        } 
+}
+
 int main(void)
 {
         char cmd[CMDLINE_MAX];
@@ -212,8 +370,6 @@ int main(void)
         while (1) {
                 char *nl;
                 int retval;
-                struct Command* head_command = (struct Command*) malloc(sizeof(struct Command));
-	        struct Command* current_command = (struct Command*) malloc(sizeof(struct Command));
                 int command_counter = 1;
 
                 /* Print prompt */
@@ -234,6 +390,7 @@ int main(void)
                 if (nl)
                         *nl = '\0';
 
+                /* Store copy of the entire command for output purposes */
                 char cmd_cpy[CMDLINE_MAX];
                 strcpy(cmd_cpy, cmd);
 
@@ -245,39 +402,14 @@ int main(void)
 
                 /* Build a linked list of the command strings seperated by the
                         | operator */
-                struct StringList* string_list_head = (struct StringList*) malloc(sizeof(struct StringList));
-                struct StringList* string_list_current = (struct StringList*) malloc(sizeof(struct StringList));
-                string_list_head = string_list_current;
-                char* token = strtok(cmd, "|");
-                strcpy(string_list_current->string, token);
-                token = strtok(NULL, "|");
-                while (token != NULL) {
-                        command_counter++;
-                        struct StringList* string_list_new = (struct StringList*) malloc(sizeof(struct StringList));
-                        strcpy(string_list_new->string, token);
-                        string_list_current->next = string_list_new;
-                        string_list_current = string_list_current->next;
-                        token = strtok(NULL, "|");
-                }
-                string_list_current->next = NULL;
+                struct StringList* head_string_list = (struct StringList*) malloc(sizeof(struct StringList));
+                stringlist_parse(head_string_list, &command_counter, cmd);
 
                 /* Build a linked list of parsed Command stucts */
-                string_list_current = string_list_head;
-                head_command = current_command;
-                enum error err = command_parse(current_command, string_list_current->string);
-                string_list_current = string_list_current->next;
-                while(string_list_current != NULL) {
-                        struct Command* next_command = (struct Command*) malloc(sizeof(struct Command));
-                        enum error err = command_parse(next_command, string_list_current->string);
-                        current_command->next = next_command;
-                        current_command = current_command->next;
-                        string_list_current = string_list_current->next;
-                }
+                struct CommandList* head_command = (struct CommandList*) malloc(sizeof(struct CommandList));
+                commandlist_parse(head_command, head_string_list);
 
-                /* Iterate through list of commands and execute sudo system
-                        each time */
-
-		/*
+                /*
                 if (error_mgmt(err) != ERR) {
                 	while (current_command->next != NULL) {
                         	retval = psuedo_system(current_command);
@@ -287,8 +419,15 @@ int main(void)
 		}
                 */
 
-                current_command = head_command;
-                execute_job_v2(head_command, command_counter);
+                int exit_codes[command_counter];
+                execute_job(head_command, command_counter, exit_codes);
+
+                fprintf(stderr, "+ completed '%s' ", cmd_cpy);
+                for (int i = 0; i < command_counter; i++)
+                {
+                        fprintf(stderr, "[%i]", exit_codes[i]);
+                }
+                fprintf(stderr, "\n");
 
                 // int exit_code;
                 // exit_code = psuedo_system(current_command, command_counter);
