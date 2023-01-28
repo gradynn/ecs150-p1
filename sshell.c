@@ -275,8 +275,8 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
         strcpy(current_command_string->string, token);
         token = strtok(NULL, "|");
 
-        struct CommandString* new_command_string = (struct CommandString*) malloc(sizeof(struct CommandString));
         while (token != NULL) { // capture all piped commands as strings
+                struct CommandString* new_command_string = (struct CommandString*) malloc(sizeof(struct CommandString));
                 ++(*(command_counter));
                 strcpy(new_command_string->string, token);
                 
@@ -303,7 +303,6 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
 
         /* free dynamically allocated memory */
         free(current_command_string);
-        free(new_command_string);
         
         return NO_ERR;
 }
@@ -365,7 +364,6 @@ enum error command_parse(struct Command* command, char* cmd_text)
         /* free dynamically allocated memory */
         free(raw_cmd);
         free(token);
-        free(w_cmd);
 
         return NO_ERR;
 }
@@ -395,8 +393,7 @@ enum error commandlist_parse(struct Command* head_command, struct CommandString*
                 current_command = current_command->next;
                 current_command_string = current_command_string->next;
         } 
-
-        free(current_command);
+        
         free(current_command_string);
 
         return NO_ERR;
