@@ -274,10 +274,10 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
         char* token = strtok(cmd, "|");
         strcpy(current_command_string->string, token);
         token = strtok(NULL, "|");
-
+        
         while (token != NULL) { // capture all piped commands as strings
-                struct CommandString* new_command_string = (struct CommandString*) malloc(sizeof(struct CommandString));
                 ++(*(command_counter));
+                struct CommandString* new_command_string = (struct CommandString*) malloc(sizeof(struct CommandString));
                 strcpy(new_command_string->string, token);
                 
                 current_command_string->next = new_command_string;
@@ -300,9 +300,6 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
 
         if (*command_counter != (operator_count + 1)) // ERROR HANDLING
                 return error_mgmt(ERR_MISS_CMD);
-
-        /* free dynamically allocated memory */
-        free(current_command_string);
         
         return NO_ERR;
 }
@@ -338,11 +335,13 @@ enum error command_parse(struct Command* command, char* cmd_text)
         char* redirect_path = strtok(NULL, ">"); // isolate path if there is one
         redirect_path = strtok(redirect_path, " ");
 	
-        if (operator_count > 0 && redirect_path == NULL)
+        if (operator_count > 0 && redirect_path == NULL) {
                 return error_mgmt(ERR_NO_OUT);
+        }
         
-        if (redirect_path != NULL)
+        if (redirect_path != NULL) {
                 command->path = redirect_path;
+        }
 
         /* isolate/assign command */
         char* token = (char*) malloc(CMDLINE_MAX);
@@ -352,18 +351,15 @@ enum error command_parse(struct Command* command, char* cmd_text)
         token = strtok(NULL, " ");
         int i = 1; 
         do {
-                if (i == 16) // check for too many arguments
+                if (i == 16) { // check for too many arguments
                         return error_mgmt(ERR_TOO_MANY_ARGS);
-
+ 
+                }
                 command->args[i] = token;
                 token = strtok(NULL, " ");
                 i++;
         } while (token != NULL); 
         command->args[i] = NULL; // set last argument to NULL terminating list
-
-        /* free dynamically allocated memory */
-        free(raw_cmd);
-        free(token);
 
         return NO_ERR;
 }
@@ -393,8 +389,6 @@ enum error commandlist_parse(struct Command* head_command, struct CommandString*
                 current_command = current_command->next;
                 current_command_string = current_command_string->next;
         } 
-        
-        free(current_command_string);
 
         return NO_ERR;
 }
@@ -457,13 +451,18 @@ int main(void)
 
                 /* Output process completed with process exit codes */
                 fprintf(stderr, "+ completed '%s' ", cmd);
-                for (int i = 0; i < command_counter; i++) {
+                for (int i = 0; i < command_counter; i++)
+                {
                         fprintf(stderr, "[%i]", WEXITSTATUS(exit_codes[i]));
                 }
                 fprintf(stderr, "\n");
 
-                free(head_command);
-                free(head_command_string);
+                //free(head_command);
+                //free(current_command);
+                //free(head_command_string);
+                //free(current_command_string);
+                //free(new_command_string);
+		//free(token);
         }
 
         return EXIT_SUCCESS;
