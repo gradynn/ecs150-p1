@@ -97,13 +97,10 @@ and stores the exit code in the `exit_codes` array. The parent process then
 executes the next command in the chain. The last process in the chain is
 executed in a process that a child of the original process containing the shell.
 
-
-
-### Helper Functions
 The following functions are used to assist in the execution of the primary
 functions:
 ```
-enum error directory_traversal(struct Command* command_head);
+enum error cd_pwd(struct Command* command_head);
 ```
 + THis function handles all directory traversal commands. It recieves a pointer
 to the head of the `Command` linked list. It checks the first argument of each
@@ -112,6 +109,9 @@ comand from the main process before the program has a chance to fork to a new
 process. It returns an error representing the success or failure of the 
 function.
 
+
+
+### Helper Functions
 ```
 enum error output_redirection(struct Command* command);
 ```
