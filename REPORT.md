@@ -4,11 +4,11 @@
 ***
 ## Project Report: `sshell.c`
 ### **v1.0.0**
-Our implentation for this project relies on three main phases of execution. The
+Our implementation for this project relies on three main phases of execution. The
 first phase is the parsing of the input command into seperated strings. The
 second phase is the parsing of each input command into a struct that contains
 fields relevant to the execution of each command. The third phase is the
-exceution of each command in order.
+execution of each command in order.
 
 ### Structures
 The structures we used for this project are as follows:
@@ -88,7 +88,7 @@ pointer to the head of the linked list of `Command` structs, the number of
 commands piped together, and an array of integers that will store the exit codes
 of each commands execution. Based on the number of commands piped together, it
 uses branching to fork the program an approiate number of times so that there
-n = `command_counter` processes. Before each successiive call to `fork()`, it
+n = `command_counter` processes. Before each successive call to `fork()`, it
 uses `pipe()` to create a pipe between the current process and the next process.
 The output of the current process is redirected to the input of the next process
 using `dup2()`. The first process in the chain is executed using `execvp()` in
@@ -102,14 +102,12 @@ functions:
 ```
 enum error cd_pwd(struct Command* command_head);
 ```
-+ THis function handles all directory traversal commands. It recieves a pointer
++ This function handles all directory traversal commands. It recieves a pointer
 to the head of the `Command` linked list. It checks the first argument of each
 command to see if it is a directory traversal command. If it is, it executes the
 comand from the main process before the program has a chance to fork to a new
 process. It returns an error representing the success or failure of the 
 function.
-
-
 
 ### Helper Functions
 ```
@@ -120,12 +118,12 @@ to the a `Command` struct. It uses conditional branching to determine if the
 command contains redirection and a valid path (if path is non-null). If the 
 command path is valid, it opens the file using `open()` and redirects the
 output of the current process to the file using `dup2()`. Depending on the 
-status of the append flag, it opens the file either in O_APPEND if appropraite. 
+status of the append flag, it opens the file either in O_APPEND if appropriate. 
 It returns an error representing the success or failure of the function.
 
 ### Error Handling
 The following errors are handled by the program, and are defined using 
-enumeration. The function below reveieves an error and prints the appropriate
+enumeration. The function below recieves an error and prints the appropriate
 error message to stderr.
 ```
 enum error error_mgmt(enum error err);
@@ -134,7 +132,7 @@ enum error error_mgmt(enum error err);
 + `ERR_MISS_CMD` - Missing command
 + `ERR_NO_OUT` - No output file
 + `ERR_CANT_OPEN_OUT` - Cannot open output file
-+ `ERR_OUT_REDIR` - Misplocated output redirection
++ `ERR_OUT_REDIR` - Mislocated output redirection
 + `ERR_CANT_CD` - Cannot cd into directory
 + `ERR_CMD_NOT_FOUND` - Command not found
 + `ERR` - Generalized error
