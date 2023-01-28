@@ -65,26 +65,25 @@ enum error error_mgmt(enum error err)
 	return ERR;
 }
 
-enum error directory_traversal(struct Command* command_head) {
-        struct Command* ptr = command_head;
+int cd_pwd(struct Command* command) {
+	if (!strcmp(command->args[0], "cd")) {
+		if (chdir(command->args[1]) == -1) {
+			error_mgmt(ERR_CANT_CD);
+			return 1;
+		}
+		
+		return 0;
+	}
 
-        while (ptr != NULL) {
-                if (!strcmp(ptr->args[0], "cd")) {
-                        if (chdir(ptr->args[1]) == -1)
-                                return error_mgmt(ERR_CANT_CD);
-                }
-
-                if (!strcmp(ptr->args[0], "pwd")) {
+	if (!strcmp(command->args[0], "pwd")) {
                         char cwd[CMDLINE_MAX];
                         getcwd(cwd, sizeof(cwd));
                         printf("%s\n", cwd);
-                        return NO_ERR;
-                }
+			
+			return 0;
+	}
 
-                ptr = ptr->next;
-        }
-
-        return NO_ERR;
+        return -1;
 }
 
 enum error output_redirection(struct Command* command) {
@@ -153,13 +152,10 @@ enum error execute_job(struct Command* command_head, int command_counter, int ex
 {
         struct Command* ptr = command_head;
 
-        if (directory_traversal(ptr) == ERR)
-                return ERR_CANT_CD;
-
         if (command_counter == 1) {
                 int pid = fork();
 
-                if (pid == 0) { //child
+                if (pid == 0) { // child
                         if (output_redirection(ptr) == ERR)
                                 return ERR;
                         if (execvp(ptr->args[0], ptr->args) == -1) {
@@ -246,7 +242,7 @@ enum error execute_job(struct Command* command_head, int command_counter, int ex
                                                         return ERR;
                                         }
 
-                                } else { //parent 3
+                                } else { // parent 3
 					if (parent_execute(ptr, fd, exit_codes, pid, 1, 2) == ERR)
                                                 return ERR;
                                 }
@@ -270,7 +266,7 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
 
         /* Count instances of | in the whole command */
         int operator_count = 0;
-        for (int i = 0; i < strlen(cmd); i++) {
+        for (long unsigned int i = 0; i < strlen(cmd); i++) {
                 if(cmd[i] == '|')
                         operator_count++;
         }
@@ -294,15 +290,15 @@ enum error stringlist_parse(struct CommandString* head_command_string, int* comm
         current_command_string = head_command_string;
         
         for (int i = 0; i < *(command_counter); i++) {
-                for (int j = 0; j < strlen(current_command_string->string); j++) {
-                        if ((current_command_string->string[j] == '>') && (i != (*command_counter - 1))) //ERROR HANDLING
+                for (long unsigned int j = 0; j < strlen(current_command_string->string); j++) {
+                        if ((current_command_string->string[j] == '>') && (i != (*command_counter - 1))) // ERROR HANDLING
                                 return error_mgmt(ERR_OUT_REDIR);
 
                 }
                 current_command_string = current_command_string->next;
         }
 
-        if (*command_counter != (operator_count + 1)) //ERROR HANDLIND
+        if (*command_counter != (operator_count + 1)) // ERROR HANDLING
                 return error_mgmt(ERR_MISS_CMD);
         
         return NO_ERR;
@@ -402,7 +398,6 @@ int main(void)
 
         while (1) {
                 char *nl;
-                //int retval;
                 int command_counter = 1;
 
                 /* Print prompt */
@@ -414,7 +409,7 @@ int main(void)
 
                 /* Print command line if stdin is not provided by terminal */
                 if (!isatty(STDIN_FILENO)) {
-                        //printf("%s", cmd);
+                        printf("%s", cmd);
                         fflush(stdout);
                 }
 
@@ -423,44 +418,47 @@ int main(void)
                 if (nl)
                         *nl = '\0';
 
-                /* Store copy of the entire command for output purposes */
-                char cmd_cpy[CMDLINE_MAX];
-                strcpy(cmd_cpy, cmd);
-
                 /* Builtin command */
                 if (!strcmp(cmd, "exit")) {
-                        fprintf(stderr, "Bye...\n");
+                        fprintf(stderr, "Bye...\n+ completed '%s' [0]\n", cmd);
                         break;
                 }
 
                 /* Build a linked list of the command strings seperated by the
                         | operator */
                 struct CommandString* head_command_string = (struct CommandString*) malloc(sizeof(struct CommandString));
-                if(stringlist_parse(head_command_string, &command_counter, cmd) == ERR)
+                if (stringlist_parse(head_command_string, &command_counter, cmd) == ERR)
                         continue;
 
 
                 /* Build a linked list of parsed Command stucts */
                 struct Command* head_command = (struct Command*) malloc(sizeof(struct Command));
-                if(commandlist_parse(head_command, head_command_string) == ERR)
+                if (commandlist_parse(head_command, head_command_string) == ERR)
                         continue;
 
+		/* Execute cd or pwd commands */
+		int exit_code = cd_pwd(head_command);
+		if (exit_code >= 0) {
+			fprintf(stderr, "+ completed '%s' [%i]\n", cmd, exit_code);
+			continue;
+		}
+
                 /* Execute the job (all commands in a chain) */
-                int exit_codes[command_counter];              
-                if (execute_job(head_command, command_counter, exit_codes) == ERR) 
+                int exit_codes[command_counter];
+		if (execute_job(head_command, command_counter, exit_codes) == ERR) 
                        continue;
 
                 /* Output process completed with process exit codes */
-                fprintf(stderr, "+ completed '%s' ", cmd_cpy);
+                fprintf(stderr, "+ completed '%s' ", cmd);
                 for (int i = 0; i < command_counter; i++)
                 {
                         fprintf(stderr, "[%i]", WEXITSTATUS(exit_codes[i]));
                 }
                 fprintf(stderr, "\n");
 
-                //free(head_command);
+                free(head_command);
                 //free(current_command);
-                //free(head_command_string);
+                free(head_command_string);
                 //free(current_command_string);
                 //free(new_command_string);
 		//free(token);

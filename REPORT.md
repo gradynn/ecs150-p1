@@ -26,7 +26,7 @@ passed to execvp(). The path field contains the path to the executable file as
 specified following a > or >>. The append field is a boolean that is set to 1 if
 the command output is to be appended to the file specified by path. The next 
 field is a pointer to another Command struct. This allows the storing of 
-successive piped commands in a lined list.
+successive piped commands in a linked list.
 
 ```
 struct CommandString {
