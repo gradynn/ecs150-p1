@@ -333,7 +333,7 @@ enum error command_parse(struct Command* command, char* cmd_text)
 
         char* w_cmd = strtok(raw_cmd, ">"); // isolate command
         char* redirect_path = strtok(NULL, ">"); // isolate path if there is one
-        char* redirect_path = strtok(redirect_path, " ");
+        redirect_path = strtok(redirect_path, " ");
 	
         if (operator_count > 0 && redirect_path == NULL) {
                 return error_mgmt(ERR_NO_OUT);
